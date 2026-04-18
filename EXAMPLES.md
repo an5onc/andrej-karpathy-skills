@@ -1,6 +1,6 @@
 # Examples
 
-Real-world code examples demonstrating the four principles. Each example shows what LLMs commonly do wrong and how to fix it.
+Real-world code examples demonstrating the seven principles. Each example shows what LLMs commonly do wrong and how to fix it.
 
 ---
 
@@ -495,6 +495,262 @@ def sort_scores(scores):
 
 ---
 
+## 5. Read Before You Write
+
+### Example 1: Assumed File Structure
+
+**User Request:** "Add a new endpoint to the user controller"
+
+**❌ What LLMs Do (Assume Structure)**
+
+```python
+# Without reading the file, assumes a class-based controller
+class UserController:
+    def get_user(self, user_id: int):
+        return User.query.get(user_id)
+    
+    # Adds new method assuming class structure
+    def delete_user(self, user_id: int):
+        user = User.query.get(user_id)
+        db.session.delete(user)
+        db.session.commit()
+```
+
+**Problems:**
+- Didn't read the actual file first
+- Assumed class-based structure (might be function-based)
+- Assumed SQLAlchemy patterns (might use different ORM)
+- Assumed db.session exists
+
+**✅ What Should Happen (Read First)**
+
+```
+Before adding the endpoint, let me read the existing controller to understand:
+1. The file structure (class-based vs function-based)
+2. The ORM/database patterns used
+3. Existing error handling conventions
+4. Authentication/authorization patterns
+
+[Reads file first, then matches existing patterns exactly]
+```
+
+### Example 2: Hallucinated API
+
+**User Request:** "Use the caching library to cache this response"
+
+**❌ What LLMs Do (Guess API)**
+
+```python
+from cache_lib import Cache, TTL
+
+cache = Cache(backend="redis", ttl=TTL.MINUTES_5)
+
+@cache.memoize(expire=300)
+def get_expensive_data():
+    return compute_expensive_thing()
+```
+
+**Problems:**
+- `cache_lib` might not exist or have different API
+- `TTL` enum might not exist
+- `memoize` decorator syntax might be wrong
+- `backend` parameter might not be valid
+
+**✅ What Should Happen (Check First)**
+
+```
+I see you want to use a caching library. Before implementing:
+
+1. What's the exact package name? (I don't want to guess the import)
+2. Is there existing caching code in this project I should follow?
+
+Or if you can point me to existing usage in the codebase, 
+I'll match that pattern exactly.
+```
+
+---
+
+## 6. Prefer Reversible Actions
+
+### Example 1: Destructive Cleanup
+
+**User Request:** "Clean up the unused files in this directory"
+
+**❌ What LLMs Do (Delete Immediately)**
+
+```bash
+rm -rf old_configs/
+rm -rf deprecated/
+rm unused_helper.py
+rm legacy_utils.py
+```
+
+**Problems:**
+- Deleted files permanently without confirmation
+- "Unused" was an assumption, not verified
+- No backup or soft-delete option
+- Hard to recover if wrong
+
+**✅ What Should Happen (Reversible First)**
+
+```
+I found these potentially unused files:
+- old_configs/ (last modified 2 years ago)
+- deprecated/ (no imports found)
+- unused_helper.py (no references in codebase)
+- legacy_utils.py (imported only in test files)
+
+Before deleting, I recommend:
+1. Move to `_archive/` directory instead of deleting
+2. Or rename with `.bak` extension
+3. Commit the removal separately so it's easy to revert
+
+Which approach would you prefer? Or should I verify 
+usage more thoroughly first?
+```
+
+### Example 2: Database Migration
+
+**User Request:** "Drop the unused columns from the users table"
+
+**❌ What LLMs Do (Destructive Migration)**
+
+```sql
+ALTER TABLE users DROP COLUMN legacy_status;
+ALTER TABLE users DROP COLUMN old_preference_json;
+ALTER TABLE users DROP COLUMN deprecated_flag;
+```
+
+**Problems:**
+- Data loss is permanent
+- No verification columns are actually unused
+- No backup of data
+- Can't rollback after execution
+
+**✅ What Should Happen (Safe Approach)**
+
+```
+Before dropping columns, I recommend a safer approach:
+
+1. First, verify they're truly unused:
+   - Search codebase for column references
+   - Check for any ORM models using them
+   - Review recent queries in logs
+
+2. If dropping, use a reversible migration:
+   ```sql
+   -- Migration: rename instead of drop
+   ALTER TABLE users RENAME COLUMN legacy_status TO _deprecated_legacy_status;
+   
+   -- Keep for 30 days, then run cleanup migration
+   ```
+
+3. Or backup first:
+   ```sql
+   CREATE TABLE users_column_backup AS 
+   SELECT id, legacy_status, old_preference_json FROM users;
+   ```
+
+Which approach would you prefer?
+```
+
+---
+
+## 7. Honest Uncertainty
+
+### Example 1: Library Version Uncertainty
+
+**User Request:** "How do I use the new streaming API in langchain?"
+
+**❌ What LLMs Do (Fabricate Details)**
+
+```python
+from langchain.streaming import StreamHandler, StreamConfig
+
+config = StreamConfig(
+    buffer_size=1024,
+    timeout_ms=5000,
+    on_chunk=lambda x: print(x)
+)
+
+handler = StreamHandler(config)
+chain.stream(handler)
+```
+
+**Problems:**
+- API might have changed since training
+- Class names might be wrong
+- Parameter names might be fabricated
+- Confident tone hides uncertainty
+
+**✅ What Should Happen (Flag Uncertainty)**
+
+```
+I can outline the general approach for streaming in LangChain, 
+but I should flag: my knowledge might be outdated as this API 
+changes frequently.
+
+The pattern I'm aware of is:
+```python
+# This was accurate as of [date], verify current docs
+for chunk in chain.stream(input):
+    print(chunk)
+```
+
+I'd recommend checking:
+1. Current LangChain docs for your version
+2. The `stream()` method signature in your installed version
+3. Any existing streaming code in your project
+
+What version of LangChain are you using?
+```
+
+### Example 2: Ambiguous Bug Report
+
+**User Request:** "Why is the API slow?"
+
+**❌ What LLMs Do (Confident Diagnosis)**
+
+```
+The API is slow because:
+1. You're not using connection pooling
+2. The database queries aren't indexed
+3. The JSON serialization is inefficient
+
+Here's the fix:
+[Proceeds to implement changes without verification]
+```
+
+**Problems:**
+- No evidence for any of these claims
+- Didn't measure or profile
+- Implementing fixes for guessed problems
+- Confident tone prevents user from questioning
+
+**✅ What Should Happen (Honest Assessment)**
+
+```
+I don't have enough information to diagnose this yet. 
+"Slow" could mean many things:
+
+Questions to narrow down:
+1. What's the actual latency? (500ms vs 30s are different problems)
+2. Which endpoints are slow? (All of them, or specific ones?)
+3. When did it start? (Recent change, or always been this way?)
+4. What does profiling/tracing show?
+
+Common causes I'd investigate, in order:
+- Database queries (most common) - check slow query log
+- N+1 queries - add logging to count queries per request
+- External API calls - add timing around integrations
+- Memory/CPU constraints - check server metrics
+
+Would you like help setting up profiling, or do you have 
+metrics I can look at?
+```
+
+---
+
 ## Anti-Patterns Summary
 
 | Principle | Anti-Pattern | Fix |
@@ -503,6 +759,9 @@ def sort_scores(scores):
 | Simplicity First | Strategy pattern for single discount calculation | One function until complexity is actually needed |
 | Surgical Changes | Reformats quotes, adds type hints while fixing bug | Only change lines that fix the reported issue |
 | Goal-Driven | "I'll review and improve the code" | "Write test for bug X → make it pass → verify no regressions" |
+| Read Before You Write | Assumes class structure, hallucinates API signatures | Read file first, ask about unfamiliar libraries |
+| Prefer Reversible Actions | `rm -rf` without confirmation, `DROP COLUMN` without backup | Rename/archive first, ask before destructive ops |
+| Honest Uncertainty | Fabricates library API with confidence | Flag outdated knowledge, ask clarifying questions |
 
 ## Key Insight
 
